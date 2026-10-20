@@ -8,7 +8,8 @@
 
 
 import pyomo.environ as pyo
-
+import openpyxl as px
+import re
 
 
 #Each piece is stored as a list of 4 integers representing the edges in order
@@ -18,6 +19,132 @@ import pyomo.environ as pyo
 # every single positive and if they don't match a constraint is added to the
 # model to block that pairing
 # Note that due to the rotational nature of the puzzle, [3,-1,-1,-2] is the same as [-1,-2,3,-1] and [-2,3,-1,-1] and [-1,-1,-2,3]
+
+
+def rotate(sides, o):
+    return [sides[(i - o) % 4] for i in range(4)]
+
+def read_pieces_from_excel():
+    import re
+from openpyxl import load_workbook
+
+def load_pieces(path='ScrambleSquare\\scramble squares input.xlsx', sheet=None):
+    """Read scramble-square pieces from an Excel layout.
+
+    Each piece is a 'Square N' label cell with its side values
+    directly above, right of, below, and left of it.
+    Returns a list of [top, right, bottom, left], ordered by N.
+    """
+    wb = load_workbook(path, data_only=True)
+    ws = wb[sheet] if sheet else wb.active
+
+    found = {}
+    for row in ws.iter_rows():
+        for cell in row:
+            if not isinstance(cell.value, str):
+                continue
+            match = re.fullmatch(r"\s*Square\s*(\d+)\s*", cell.value)
+            if not match:
+                continue
+
+            n = int(match.group(1))
+            r, c = cell.row, cell.column
+            neighbors = {
+                "top": (r - 1, c),
+                "right": (r, c + 1),
+                "bottom": (r + 1, c),
+                "left": (r, c - 1),
+            }
+
+            sides = []
+            for name, (rr, cc) in neighbors.items():
+                v = ws.cell(row=rr, column=cc).value
+                if v is None or str(v).strip() == "":
+                    raise ValueError(f"Square {n} is missing its {name} value "
+                                     f"(cell {ws.cell(row=rr, column=cc).coordinate})")
+                sides.append(int(v))
+            found[n] = sides
+
+    if not found:
+        raise ValueError("No 'Square N' cells found")
+    return [found[n] for n in sorted(found)]
+
+
+def build_model(pieces):
+    """
+    Build a Pyomo model for the Scramble Square puzzle.
+
+    Args:
+        pieces (list): A list of pieces, where each piece is represented as a list of 4 integers
+    """
+    m = pyo.ConcreteModel()
+    m.P = pyo.RangeSet(0, 8)
+    m.R = pyo.RangeSet(0, 2)
+    m.C = pyo.RangeSet(0, 2)
+    m.O = pyo.RangeSet(0, 3)
+
+    m.x = pyo.Var(m.P, m.R, m.C, m.O, domain=pyo.Binary)
+    m.obj = pyo.Objective(expr=0)  # feasibility problem
+
+    # Each piece placed exactly once
+    m.one_place = pyo.Constraint(
+        m.P,
+        rule=lambda m, i: sum(m.x[i, r, c, o]
+                            for r in m.R for c in m.C for o in m.O) == 1,
+    )
+
+    # Each cell gets exactly one piece
+    m.one_piece = pyo.Constraint(
+        m.R, m.C,
+        rule=lambda m, r, c: sum(m.x[i, r, c, o]
+                                for i in m.P for o in m.O) == 1,
+    )
+
+    # Symmetry breaking: piece 0 stays in orientation 0 Not strictly necessary but
+    # prevents the solver from exploring symmetric solutions
+    for r in m.R:
+        for c in m.C:
+            for o in (1, 2, 3):
+                m.x[0, r, c, o].fix(0)
+
+    m.conflicts = pyo.ConstraintList()
+
+    # Horizontal: right of (r,c) must cancel left of (r,c+1)
+    for r in range(3):
+        for c in range(2):
+            for i in range(9):
+                for o in range(4):
+                    right = rotate(pieces[i], o)[1]
+                    for i2 in range(9):
+                        if i2 == i:
+                            continue
+                        for o2 in range(4):
+                            left = rotate(pieces[i2], o2)[3]
+                            if right + left != 0:
+                                m.conflicts.add(
+                                    m.x[i, r, c, o] + m.x[i2, r, c + 1, o2] <= 1)
+
+    # Vertical: bottom of (r,c) must cancel top of (r+1,c)
+    for r in range(2):
+        for c in range(3):
+            for i in range(9):
+                for o in range(4):
+                    bottom = rotate(pieces[i], o)[2]
+                    for i2 in range(9):
+                        if i2 == i:
+                            continue
+                        for o2 in range(4):
+                            top = rotate(pieces[i2], o2)[0]
+                            if bottom + top != 0:
+                                m.conflicts.add(
+                                    m.x[i, r, c, o] + m.x[i2, r + 1, c, o2] <= 1)
+    return m
+    
+
+
+pieces = load_pieces()
+print(pieces)
+"""
 pieces = [
     [3, -4, -1, -2],
     [4, 1, 2, 3],
@@ -27,75 +154,12 @@ pieces = [
     [-1, -4, 3, -2],
     [-3, 2, -4, -1],
     [-4, -2, 3, 2],
-    [-2, 4, -1, 1],
+    [-2, 4, -1, 1]
 ]
+"""
+m = build_model(pieces)
 
-def rotate(sides, o):
-    return [sides[(i - o) % 4] for i in range(4)]
-
-m = pyo.ConcreteModel()
-m.P = pyo.RangeSet(0, 8)
-m.R = pyo.RangeSet(0, 2)
-m.C = pyo.RangeSet(0, 2)
-m.O = pyo.RangeSet(0, 3)
-
-m.x = pyo.Var(m.P, m.R, m.C, m.O, domain=pyo.Binary)
-m.obj = pyo.Objective(expr=0)  # feasibility problem
-
-# Each piece placed exactly once
-m.one_place = pyo.Constraint(
-    m.P,
-    rule=lambda m, i: sum(m.x[i, r, c, o]
-                          for r in m.R for c in m.C for o in m.O) == 1,
-)
-
-# Each cell gets exactly one piece
-m.one_piece = pyo.Constraint(
-    m.R, m.C,
-    rule=lambda m, r, c: sum(m.x[i, r, c, o]
-                             for i in m.P for o in m.O) == 1,
-)
-
-# Symmetry breaking: piece 0 stays in orientation 0 Not strictly necessary but
-# prevents the solver from exploring symmetric solutions
-for r in m.R:
-    for c in m.C:
-        for o in (1, 2, 3):
-            m.x[0, r, c, o].fix(0)
-
-m.conflicts = pyo.ConstraintList()
-
-# Horizontal: right of (r,c) must cancel left of (r,c+1)
-for r in range(3):
-    for c in range(2):
-        for i in range(9):
-            for o in range(4):
-                right = rotate(pieces[i], o)[1]
-                for i2 in range(9):
-                    if i2 == i:
-                        continue
-                    for o2 in range(4):
-                        left = rotate(pieces[i2], o2)[3]
-                        if right + left != 0:
-                            m.conflicts.add(
-                                m.x[i, r, c, o] + m.x[i2, r, c + 1, o2] <= 1)
-
-# Vertical: bottom of (r,c) must cancel top of (r+1,c)
-for r in range(2):
-    for c in range(3):
-        for i in range(9):
-            for o in range(4):
-                bottom = rotate(pieces[i], o)[2]
-                for i2 in range(9):
-                    if i2 == i:
-                        continue
-                    for o2 in range(4):
-                        top = rotate(pieces[i2], o2)[0]
-                        if bottom + top != 0:
-                            m.conflicts.add(
-                                m.x[i, r, c, o] + m.x[i2, r + 1, c, o2] <= 1)
-
-solver = pyo.SolverFactory("appsi_highs")
+solver = pyo.SolverFactory("highs")
 result = solver.solve(m, tee=True)
 print(result.solver.termination_condition)
 
