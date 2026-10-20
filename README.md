@@ -7,6 +7,6 @@ Rules of Nurikabe
 > 3. All wall tiles must form a single orthogonally connected region with no breaks
 > 4. No 2x2 region may be entirely wall
 
-The formulation of nurikabe relies on flow constraints to ensure connectivity. Each clue serves as a rook and every other cell must contribute +1 to the total flow so the only way for the root cells to have the correct flow is for every single cell to be somewhere connected.
+The formulation of nurikabe relies on flow constraints to ensure connectivity. Each clue serves as a root and every other cell must contribute +1 to the total flow so the only way for the root cells to have the correct flow is for every single cell to be somewhere connected.
 
 To run the solver, conver the puzzle in a .CSV file where blank cells become empty strings and save it into the nurikabe folder. Then go into nurikabe.py and change the path in the first line of the main method to the puzzle. 
