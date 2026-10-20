@@ -1,31 +1,108 @@
-This folder contains MILP formulations of various puzzle games
- ## 1. Nurikabe
- The goal of Nurikabe is to divide the grid into several orthogonally connected islands by choosing cells to form a single orthogonoally connected wall
-Rules of Nurikabe
-> 1. Some cells have numbers. Each numbered cell is an island and the value of the cell tells you how many orthogonally connected cells form that island. Every island must have exactly 1 clue and every clue must have an island
-> 2. No islands can be touch each other orthogonally, diagonal touching is allowed
-> 3. All wall tiles must form a single orthogonally connected region with no breaks
-> 4. No 2x2 region may be entirely wall
+# Puzzle Solvers with Mixed-Integer Linear Programming
 
-The formulation of nurikabe relies on flow constraints to ensure connectivity. Each clue serves as a root and every other cell must contribute +1 to the total flow so the only way for the root cells to have the correct flow is for every single cell to be somewhere connected.
+This repository contains mixed-integer linear programming (MILP) formulations of
+logic puzzles, built in Python with Pyomo and solved with HiGHS.
 
-To run the solver, conver the puzzle in a .CSV file where blank cells become empty strings and save it into the nurikabe folder. Then go into nurikabe.py and change the path in the first line of the main method to the puzzle. 
+| Puzzle | Key modeling technique |
+|---|---|
+| [Nurikabe](#1-nurikabe) | Network flow constraints to enforce connectivity |
+| [Scramble Squares](#2-scramble-squares) | Assignment model with pairwise conflict constraints |
 
+## Requirements
 
+```
+pip install pyomo highspy openpyxl
+```
+
+---
+
+## 1. Nurikabe
+
+Nurikabe is a grid puzzle in which some cells contain numbers. The goal is to
+shade cells as "wall" so that the unshaded cells form islands that satisfy the
+clues.
+
+### Rules
+
+1. Each numbered cell belongs to exactly one island, and its number equals the
+   number of orthogonally connected cells in that island. Every island contains
+   exactly one clue.
+2. Islands may not touch each other orthogonally (diagonal contact is allowed).
+3. All wall cells must form a single orthogonally connected region.
+4. No 2×2 block may consist entirely of wall cells.
+
+### Formulation
+
+Connectivity is the difficult part to express linearly. The model uses flow
+constraints: each clue cell acts as a root, and every other cell in its region
+must send one unit of flow toward that root through adjacent cells. The root can
+only receive the required amount of flow if every cell is connected to it, so
+any disconnected cell makes the solution infeasible.
+
+### Usage
+
+1. Save the puzzle as a `.csv` file in the `Nurikabe` folder, with clue cells
+   containing their numbers and blank cells left empty.
+2. In `nurikabe.py`, set the file path on the first line of the `main` function.
+3. Run `python nurikabe.py`.
+
+---
 
 ## 2. Scramble Squares
-This is a puzzle that I have a lot of nostalgia for from growing up. The premise
-is that you have 9 square tiles and each edge has either the front half or the
-back half of one of four objects. (The one I had growing up and in the
-example in the folder is 4 different whales folder was four different whales).
-The goal is to arrange the 9 squares in a 3x3 grid so that the edges line up. 
 
-To run open the scramble squares input excel sheet. Arrange your puzzle in a
-random 3x3 grid. Decide on a number for each object and sign for each half. (Eg
-the red bird is 1, the blue bird is 2, and yellow bird is 3 and the multicolor
-bird is 4. Heads are positive and tails and negative). Then transcribe the
-puzzle into the excel sheet at the top. Running scramble_square.py output 
+Scramble Squares is a tile-matching puzzle with 9 square pieces. Each edge of a
+piece shows either the front half or the back half of one of four objects. The
+goal is to arrange the pieces in a 3×3 grid, rotating them as needed, so that
+every pair of adjacent edges forms a complete object.
 
-> NOTE: The bird example puzzle is infeasable and is meant to show how to input
-> data. This is a known issue and I'm working on finding a better example to use
-> better example. I'm also working on making the output more readable
+The puzzle has 9! × 4⁹ ≈ 95 billion possible arrangements, which makes it a
+natural fit for integer programming rather than trial and error. (I grew up with
+the whale version of this puzzle, pictured in `Whales ex.jpg`.)
+
+### Formulation
+
+- **Decision variables:** binary `x[p, r, c, o]` equals 1 if piece `p` is placed
+  at row `r`, column `c`, in orientation `o` (one of four 90° rotations).
+- **Assignment constraints:** every piece is placed exactly once, and every cell
+  holds exactly one piece.
+- **Edge matching:** each edge is encoded as an integer, where the absolute value
+  identifies the object and the sign identifies the half. Two adjacent edges
+  match only if their values sum to zero. For every pair of piece placements
+  whose shared edge would not match, the constraint
+  `x[p1, ...] + x[p2, ...] ≤ 1` forbids choosing both.
+- **Symmetry breaking:** any solution can be rotated as a whole, so piece 1 is
+  fixed to orientation 0 to remove the three rotated copies of each solution.
+
+### Usage
+
+1. Open `scramble squares input.xlsx`.
+2. Lay your pieces out in any 3×3 arrangement.
+3. Assign a number to each object and a sign to each half. For example:
+
+   | Number | Object |
+   |---|---|
+   | 1 | Red bird |
+   | 2 | Blue bird |
+   | 3 | Yellow bird |
+   | 4 | Multicolor bird |
+
+   Heads are positive and tails are negative.
+4. Enter each piece's four edge values around its `Square N` label: top above
+   the label, right to the right, bottom below, and left to the left.
+5. Run `python scramble_square.py`. The solver prints the position and
+   orientation of each piece in the solution, or reports that no solution
+   exists.
+
+### Validation
+
+The model was tested against a puzzle transcribed in its already-solved state,
+which must be feasible. This test exposed a bug in Pyomo's older `appsi_highs`
+interface, which reported a solvable instance as infeasible. The solver now uses
+the current `highs` interface.
+
+### Known issues
+
+- The included bird example is infeasible as transcribed. It demonstrates the
+  input format, but at least two edges were likely misread from the source
+  image. A verified example will replace it.
+- The solution output is a plain-text list. A grid-style display is planned.
