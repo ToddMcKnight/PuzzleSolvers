@@ -8,13 +8,6 @@ logic puzzles, built in Python with Pyomo and solved with HiGHS.
 | [Nurikabe](#1-nurikabe) | Network flow constraints to enforce connectivity |
 | [Scramble Squares](#2-scramble-squares) | Assignment model with pairwise conflict constraints |
 
-## Requirements
-
-```
-pip install pyomo highspy openpyxl
-```
-
----
 
 ## 1. Nurikabe
 
