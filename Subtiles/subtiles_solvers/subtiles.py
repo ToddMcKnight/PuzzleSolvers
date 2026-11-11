@@ -98,16 +98,20 @@ def canonical(shape):
 # Solver
 # ======================================================================================
 
-def solve(clues, H, W, verbose=True):
+def solve(clues, H, W, verbose=True, want_alt=False, log=None):
     """Solve a Subtiles puzzle.
 
     clues maps (row, col) to its clue value, on an H x W grid. Grows the shapes level by
     level with presolve after each one, then tries each candidate N from the largest down
     with CP-SAT. Returns (N, grid, unique), where grid[r][c] is the size of the shape
-    covering the cell (0 if none), or None if no N works.
+    covering the cell (0 if none), or None if no N works. With want_alt=True it returns
+    (N, grid, unique, alt), where alt is a second solution grid, or None if unique.
+    log, if given, receives the progress lines instead of print (used by the generator
+    to see which level a slow solve is stuck on).
     """
     start_time = time.time()
-    log = print if verbose else (lambda *a, **k: None)
+    if log is None:
+        log = print if verbose else (lambda *a, **k: None)
 
     # clue_cells[K] = cells whose clue is K, i.e. cells every K-placement must cover.
     clue_cells = defaultdict(set)
@@ -366,7 +370,7 @@ def solve(clues, H, W, verbose=True):
         # presolve()'s downward sweep stops below N.
         ok, rounds = presolve(N, N)
         if ok:
-            result = _cpsat(N, placements_at, parents, H, W, log, start_time)
+            result = _cpsat(N, placements_at, parents, H, W, log, start_time, want_alt)
             if result:
                 return result
         log(f"N={N}: infeasible")
@@ -375,7 +379,7 @@ def solve(clues, H, W, verbose=True):
     return None
 
 
-def _cpsat(N, placements_at, parents, H, W, log, start_time):
+def _cpsat(N, placements_at, parents, H, W, log, start_time, want_alt=False):
     """Pick one placement per level 1..N with CP-SAT.
 
     Constraints: no cell covered twice, and a K-shape can only be used if one of its
@@ -431,9 +435,21 @@ def _cpsat(N, placements_at, parents, H, W, log, start_time):
     # Uniqueness: ban this exact set of placements (at least one must change) and
     # solve again. If nothing else is feasible, the solution is unique.
     model.AddBoolOr([var.Not() for var in chosen])
-    unique = cp_model.CpSolver().Solve(model) == cp_model.INFEASIBLE
+    checker = cp_model.CpSolver()
+    unique = checker.Solve(model) == cp_model.INFEASIBLE
     log(f"unique: {unique}")
-    return N, grid, unique
+    if not want_alt:
+        return N, grid, unique
+    # Also hand back the second solution (None if unique), for the puzzle generator.
+    alt = None
+    if not unique:
+        alt = [[0] * W for _ in range(H)]
+        for (K, shape), group in variables.items():
+            for var, placement in group:
+                if checker.Value(var):
+                    for r, c in placement:
+                        alt[r][c] = K
+    return N, grid, unique, alt
 
 def main():
     """Read the puzzle file given on the command line, solve it, and print the grid and row sums."""
