@@ -897,7 +897,7 @@ if __name__ == "__main__":
     import sys
 
     here = os.path.dirname(os.path.abspath(__file__))
-    path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(here, "..", "nurikabe_puzzle2.csv")
+    path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(here, "..", "..", "nurikabe_puzzles", "nurikabe_puzzle1.csv")
     backend = sys.argv[2] if len(sys.argv) > 2 else DEFAULT_OPTIONS["backend"]
     R, K, cl = load_csv(path)
     res = solve(R, K, cl, backend=backend)

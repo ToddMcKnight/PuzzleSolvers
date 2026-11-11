@@ -30,6 +30,7 @@ from tkinter import filedialog, messagebox, ttk
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 IMPROVED_PATH = os.path.join(HERE, "claude_nurikabe_model", "claude_nurikabe_model.py")
+PUZZLE_DIR = os.path.join(HERE, "..", "nurikabe_puzzles")
 
 SOLVER_ORIGINAL = "Original (nurikabe.py)"
 SOLVER_IMPROVED = "Claude improved"
@@ -498,7 +499,7 @@ class NurikabeApp:
             return False
         if path is None:
             path = filedialog.askopenfilename(
-                title="Load Nurikabe puzzle", initialdir=HERE,
+                title="Load Nurikabe puzzle", initialdir=PUZZLE_DIR,
                 filetypes=[("CSV files", "*.csv"), ("All files", "*.*")])
             if not path:
                 return False
@@ -515,7 +516,7 @@ class NurikabeApp:
     def save_csv(self, path=None):
         if path is None:
             path = filedialog.asksaveasfilename(
-                title="Save Nurikabe puzzle", initialdir=HERE, defaultextension=".csv",
+                title="Save Nurikabe puzzle", initialdir=PUZZLE_DIR, defaultextension=".csv",
                 filetypes=[("CSV files", "*.csv"), ("All files", "*.*")])
             if not path:
                 return False

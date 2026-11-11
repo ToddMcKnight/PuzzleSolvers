@@ -1,6 +1,6 @@
 # Nurikabe MILP Formulation
 
-This is the mathematical formulation implemented in [`nurikabe.py`](nurikabe.py).
+This is the mathematical formulation implemented in [`nurikabe.py`](nurikabe_solvers/nurikabe.py).
 Constraint numbers match the `m.c1` to `m.c12` names in the code. Rule (13) has no
 constraint of its own, because it decides which $g$ variables exist. A *garden* is
 an island of unshaded cells, and each garden contains exactly one clue.

@@ -15,6 +15,7 @@ Cells are 1-indexed (row i, column j). Clues are given as a dataframe of
 ((row, col), value) pairs.
 """
 from ortools.sat.python import cp_model
+import os
 import pandas as pd
 import numpy as np
 
@@ -149,7 +150,8 @@ def print_solution(solver, x, raw_puzzle):
 
 
 if __name__ == "__main__":
-    raw_puzzle = np.genfromtxt("Nurikabe/nurikabe_puzzle2.csv", delimiter=",")
+    puzzle_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "nurikabe_puzzles")
+    raw_puzzle = np.genfromtxt(os.path.join(puzzle_dir, "nurikabe_puzzle1.csv"), delimiter=",")
 
     clue_df = pd.DataFrame(columns=["coords", "values"])
     num_rows, num_cols = raw_puzzle.shape

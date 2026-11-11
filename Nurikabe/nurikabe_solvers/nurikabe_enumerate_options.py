@@ -262,7 +262,7 @@ def print_solution(H, W, clues, islands):
 
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
-    path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(here, "nurikabe_puzzle1.csv")
+    path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(here, "..", "nurikabe_puzzles", "nurikabe_puzzle1.csv")
     H, W, clues = read_puzzle(path)
     res = solve(H, W, clues)
     if not res:

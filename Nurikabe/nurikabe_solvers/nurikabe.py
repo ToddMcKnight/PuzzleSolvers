@@ -30,6 +30,7 @@ Cells are 1-indexed (row i, column j). Clues are given as a list of
 ((row, col), value) pairs.
 """
 import pyomo.environ as pyo
+import os
 import pandas as pd
 import numpy as np
 
@@ -200,7 +201,8 @@ def print_solution(m, raw_puzzle):
 
 
 if __name__ == "__main__":
-    raw_puzzle = np.genfromtxt("Nurikabe/nurikabe_puzzle2.csv", delimiter=",")
+    puzzle_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "nurikabe_puzzles")
+    raw_puzzle = np.genfromtxt(os.path.join(puzzle_dir, "nurikabe_puzzle1.csv"), delimiter=",")
     print(raw_puzzle)
 
     

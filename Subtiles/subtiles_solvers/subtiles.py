@@ -38,6 +38,7 @@ look, and every place each of those could go. The solver keeps shrinking it unti
 CP-SAT can choose.
 """
 import math
+import os
 import sys
 import time
 from collections import defaultdict
@@ -436,7 +437,8 @@ def _cpsat(N, placements_at, parents, H, W, log, start_time):
 
 def main():
     """Read the puzzle file given on the command line, solve it, and print the grid and row sums."""
-    path = sys.argv[1] if len(sys.argv) > 1 else "Nurikabe//subtiles2.txt"
+    default = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "subtiles_puzzles", "subtiles2.txt")
+    path = sys.argv[1] if len(sys.argv) > 1 else default
     rows = [line.split() for line in open(path) if line.strip()]
     H, W = len(rows), len(rows[0])
     # clues[(r, c)] = value for each numbered cell; "." cells are blank.

@@ -34,10 +34,10 @@ any disconnected cell makes the solution infeasible.
 
 ### Usage
 
-1. Save the puzzle as a `.csv` file in the `Nurikabe` folder, with clue cells
+1. Save the puzzle as a `.csv` file in `Nurikabe/nurikabe_puzzles`, with clue cells
    containing their numbers and blank cells left empty.
-2. In `nurikabe.py`, set the file path on the first line of the `main` function.
-3. Run `python nurikabe.py`.
+2. In `Nurikabe/nurikabe_solvers/nurikabe.py`, set the puzzle's file name in the `__main__` block.
+3. Run `python Nurikabe/nurikabe_solvers/nurikabe.py`.
 
 ---
 
