@@ -61,11 +61,25 @@ def build_model(num_rows, num_cols, clues_df):
     # Big-M: no flow on an edge can exceed the size of the largest region
     M = max([num_walls] + list(V.values()))
 
+    # A garden can't reach cells too far from its clue
+    # A connected garden of size V[c] has every cell within V[c]-1 steps of its clue,
+    # so cells further away don't get a variable for that clue at all
+    reachable = {(i, j, c) for i, j in m.IJ for c in m.C
+                 if abs(i - L[c][0]) + abs(j - L[c][1]) <= V[c] - 1}
+    m.G = pyo.Set(dimen=3, initialize=sorted(reachable))
+
+    # Cells that can't be in any garden must be walls. Garden c can't use a cell it can't
+    # reach, or one touching a different clue since different gardens can't touch
+    forced_walls = [(i, j) for i, j in m.IJ if (i, j) not in clue_cells
+                    and not any((i, j, c) in reachable
+                                and not any(L[d] in neighbours(i, j) for d in m.C if d != c)
+                                for c in m.C)]
+
     # ---------- Variables ----------
     m.x = pyo.Var(m.IJ, domain=pyo.Binary)                 # 1 if wall
-    m.g = pyo.Var(m.IJ, m.C, domain=pyo.Binary)            # 1 if cell in garden c
+    m.g = pyo.Var(m.G, domain=pyo.Binary)                  # 1 if cell in garden c
     m.y = pyo.Var(m.IJ, domain=pyo.Binary)                 # 1 if wall root
-    m.f = pyo.Var(m.E, domain=pyo.Integers, bounds=(-M, M))  # flow (i,j)->(p,q)
+    m.f = pyo.Var(m.E, domain=pyo.Reals, bounds=(-M, M))  # flow (i,j)->(p,q)
 
     # Pure feasibility problem
     m.obj = pyo.Objective(expr=0)
@@ -73,12 +87,12 @@ def build_model(num_rows, num_cols, clues_df):
     # 1. Each cell is in exactly one garden or is a wall
     # For each cell sum over the tags for inclusion in each clue and wall and set it to 1
     m.c1 = pyo.Constraint(m.IJ, rule=lambda m, i, j:
-                          sum(m.g[i, j, c] for c in m.C) + m.x[i, j] == 1)
+                          sum(m.g[i, j, c] for c in m.C if (i, j, c) in reachable) + m.x[i, j] == 1)
 
     # 2. Each garden has the right number of cells
     # For each clue sum over the tags for cells being that clue and set equal to the value
     m.c2 = pyo.Constraint(m.C, rule=lambda m, c:
-                          sum(m.g[i, j, c] for i, j in m.IJ) == V[c])
+                          sum(m.g[i, j, c] for i, j in m.IJ if (i, j, c) in reachable) == V[c])
 
     # 3. Each clue is in its own garden
     # For each clue look up where it is and set the inclusion tag for that cell and clue to be 1
@@ -101,16 +115,26 @@ def build_model(num_rows, num_cols, clues_df):
     # y=1 implies that x=1, otherwise x is free
     m.c6 = pyo.Constraint(m.IJ, rule=lambda m, i, j: m.y[i, j] <= m.x[i, j])
 
+    # 6b. Pick the wall root ahead of time so each grid only has one valid root
+    # Any wall cell can be the root, so if we know a cell is a wall then use it
+    # Otherwise the root is the first wall cell in reading order: if (p,q) is a wall
+    # then the root must be at or before it
+    if forced_walls:
+        m.c6b = pyo.Constraint(expr=m.y[forced_walls[0]] == 1)
+    else:
+        m.c6b = pyo.Constraint(m.IJ, rule=lambda m, p, q:
+                               m.x[p, q] <= sum(m.y[i, j] for i, j in m.IJ if (i, j) <= (p, q)))
+
     # 7a. Clue cells have no outflow
     # flow (i,j) -> (p,q) <=0 means that either there is no flow or the direction is from (p,q) to (i,j)
     m.c7a = pyo.Constraint(
-        [e for e in m.E if (e[0], e[1]) in clue_cells],
-        rule=lambda m, i, j, p, q: m.f[i, j, p, q] <= 0)
-
+       [e for e in m.E if (e[0], e[1]) in clue_cells],
+      rule=lambda m, i, j, p, q: m.f[i, j, p, q] <= 0)
+    
     # 7b. Wall root has no outflow:  f*y <= 0  ->  f <= M(1-y)
     # If y is 0 then RHS equal to M and LHS is effectively free, otherwise LHS is 0 or neg same as 7a
     m.c7b = pyo.Constraint(m.E, rule=lambda m, i, j, p, q:
-                           m.f[i, j, p, q] <= M * (1 - m.y[i, j]))
+                          m.f[i, j, p, q] <= M * (1 - m.y[i, j]))
 
     # 8. Inflow to each clue equals its value minus 1
     m.c8 = pyo.Constraint(m.C, rule=lambda m, c:
@@ -132,8 +156,8 @@ def build_model(num_rows, num_cols, clues_df):
     #     Antisymmetry covers the reverse edge, so -f/+f with both signs of the
     #     difference is enough.\
     #      Case 1: Both walls or Both non-walls, then RHS both goes to M and flow is unconstrainted
-    #       Case 2: (i,j) wall and (p,q) non-wall then 10a RHS is 2M but 10b RHS is 0
-    #       Case 3: (i,j) non-wall and (p,q) non-well then 10a rhs is 0 and 10b Rhs is 2M
+    #       Case 2: (i,j) wall and (p,q) non-wall then 10a RHS is 0 but 10b RHS is 2M
+    #       Case 3: (i,j) non-wall and (p,q) wall then 10a RHS is 2M and 10b RHS is 0
     #       Note that we don't constrain that two different gardens can't flow into each but constraint 12 prevents them from being orthogonal which is stronger
     m.c10a = pyo.Constraint(m.E, rule=lambda m, i, j, p, q:
                             m.f[i, j, p, q] <= M * (1 - m.x[i, j] + m.x[p, q]))
@@ -152,7 +176,8 @@ def build_model(num_rows, num_cols, clues_df):
     # c<d to prevent redundant constraints but we need to keep every edge
     m.c12 = pyo.Constraint(
         [(i, j, p, q, c, d) for i, j, p, q in m.E
-         for c in m.C for d in m.C if c < d],
+         for c in m.C for d in m.C
+         if c < d and (i, j, c) in reachable and (p, q, d) in reachable],
         rule=lambda m, i, j, p, q, c, d: m.g[i, j, c] + m.g[p, q, d] <= 1)
 
     return m
@@ -175,7 +200,7 @@ def print_solution(m, raw_puzzle):
 
 
 if __name__ == "__main__":
-    raw_puzzle = np.genfromtxt("Nurkabe/nurikabe_puzzle2.csv", delimiter=",")
+    raw_puzzle = np.genfromtxt("Nurikabe/nurikabe_puzzle2.csv", delimiter=",")
     print(raw_puzzle)
 
     
@@ -189,7 +214,8 @@ if __name__ == "__main__":
 
     
     model = build_model(num_rows, num_cols, clue_df)
-    solver = pyo.SolverFactory("appsi_highs")  # or "gurobi", "cbc", "glpk"
+    solver = pyo.SolverFactory("highs")  # or "gurobi", "cbc", "glpk"
+    solver.options["random_seed"] = 1
     result = solver.solve(model, tee=True)
     print(result.solver.termination_condition)
     print_solution(model, raw_puzzle)
